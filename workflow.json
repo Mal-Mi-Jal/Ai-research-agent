@@ -1,0 +1,52 @@
+{
+  "id": "research-agent-automation",
+  "name": "Research Agent Automation",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "daysInterval": 1,
+              "triggerAtHour": 9
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger-1",
+      "name": "매일 9시 트리거",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:8000/research",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\n  \"topic\": \"2026년 AI 개발자 채용 트렌드\"\n}",
+        "options": {}
+      },
+      "id": "http-request-1",
+      "name": "리서치 에이전트 호출",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 300]
+    }
+  ],
+  "connections": {
+    "매일 9시 트리거": {
+      "main": [
+        [
+          {
+            "node": "리서치 에이전트 호출",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
