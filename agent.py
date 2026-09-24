@@ -5,6 +5,8 @@ from langgraph.graph import StateGraph, START, END
 from langchain_anthropic import ChatAnthropic
 from langchain_tavily import TavilySearch
 
+import memory
+
 load_dotenv()
 
 llm = ChatAnthropic(model="claude-sonnet-5")
@@ -32,6 +34,22 @@ def extract_text(message) -> str:
         for block in message.content
         if isinstance(block, dict) and block.get("type") == "text"
     )
+
+
+def check_memory_node(state: AgentState) -> dict:
+    cached = memory.find_similar_report(state["question"])
+    if cached is None:
+        return {}
+    return {"report": f"{cached}\n\n(이전에 조사한 내용을 재사용했어요 - API 호출 없음)"}
+
+
+def route_after_memory(state: AgentState) -> str:
+    return "cache_hit" if state.get("report") else "cache_miss"
+
+
+def save_memory_node(state: AgentState) -> dict:
+    memory.save_report(state["question"], state["report"])
+    return {}
 
 
 def search_node(state: AgentState) -> dict:
@@ -96,16 +114,24 @@ def write_node(state: AgentState) -> dict:
 
 
 graph = StateGraph(AgentState)
+graph.add_node("check_memory", check_memory_node)
 graph.add_node("search", search_node)
 graph.add_node("verify", verify_node)
 graph.add_node("summarize", summarize_node)
 graph.add_node("write", write_node)
+graph.add_node("save_memory", save_memory_node)
 
-graph.add_edge(START, "search")
+graph.add_edge(START, "check_memory")
+graph.add_conditional_edges(
+    "check_memory",
+    route_after_memory,
+    {"cache_hit": END, "cache_miss": "search"},
+)
 graph.add_edge("search", "verify")
 graph.add_edge("verify", "summarize")
 graph.add_edge("summarize", "write")
-graph.add_edge("write", END)
+graph.add_edge("write", "save_memory")
+graph.add_edge("save_memory", END)
 
 app = graph.compile()
 
