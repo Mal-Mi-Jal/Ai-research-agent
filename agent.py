@@ -1,5 +1,6 @@
 from dotenv import load_dotenv
 from typing import TypedDict
+from pydantic import BaseModel
 from langgraph.graph import StateGraph, START, END
 from langchain_anthropic import ChatAnthropic
 from langchain_tavily import TavilySearch
@@ -17,9 +18,47 @@ class AgentState(TypedDict):
     report: str
 
 
+class RelevanceCheck(BaseModel):
+    relevant_indices: list[int]
+
+
+def extract_text(message) -> str:
+    """thinking 모델은 content가 문자열이 아니라 블록 리스트로 올 수 있어서,
+    그 중 실제 답변(text) 블록만 골라 이어붙인다."""
+    if isinstance(message.content, str):
+        return message.content
+    return "".join(
+        block["text"]
+        for block in message.content
+        if isinstance(block, dict) and block.get("type") == "text"
+    )
+
+
 def search_node(state: AgentState) -> dict:
     result = search.invoke(state["question"])
     return {"search_results": result["results"]}
+
+
+def verify_node(state: AgentState) -> dict:
+    sources_text = "\n\n".join(
+        f"[{i + 1}] {r['title']}\n{r['content'][:200]}"
+        for i, r in enumerate(state["search_results"])
+    )
+    prompt = f"""다음은 "{state['question']}"에 대한 검색 결과 목록입니다.
+
+{sources_text}
+
+질문과 실제로 관련 있는 출처의 번호만 골라줘. 질문 주제와 무관한 회사/제품 정보, 광고성 내용은 제외해줘."""
+
+    structured_llm = llm.with_structured_output(RelevanceCheck)
+    result = structured_llm.invoke(prompt)
+
+    filtered = [
+        state["search_results"][i - 1]
+        for i in result.relevant_indices
+        if 1 <= i <= len(state["search_results"])
+    ]
+    return {"search_results": filtered}
 
 
 def summarize_node(state: AgentState) -> dict:
@@ -33,7 +72,7 @@ def summarize_node(state: AgentState) -> dict:
 
 각 출처의 핵심 내용을 번호를 매겨 간결하게 정리해줘. 각 항목 끝에 어느 출처 번호에서 나온 내용인지 표시해줘."""
     response = llm.invoke(prompt)
-    return {"summary": response.content}
+    return {"summary": extract_text(response)}
 
 
 def write_node(state: AgentState) -> dict:
@@ -52,17 +91,19 @@ def write_node(state: AgentState) -> dict:
         f"[{i + 1}] {r['title']} - {r['url']}"
         for i, r in enumerate(state["search_results"])
     )
-    report = f"{response.content}\n\n---\n출처:\n{sources}"
+    report = f"{extract_text(response)}\n\n---\n출처:\n{sources}"
     return {"report": report}
 
 
 graph = StateGraph(AgentState)
 graph.add_node("search", search_node)
+graph.add_node("verify", verify_node)
 graph.add_node("summarize", summarize_node)
 graph.add_node("write", write_node)
 
 graph.add_edge(START, "search")
-graph.add_edge("search", "summarize")
+graph.add_edge("search", "verify")
+graph.add_edge("verify", "summarize")
 graph.add_edge("summarize", "write")
 graph.add_edge("write", END)
 
