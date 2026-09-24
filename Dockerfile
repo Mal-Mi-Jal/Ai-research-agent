@@ -5,13 +5,11 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Bake the embedding model into the image so the container doesn't have
-# to download it over the network on every cold start (which was slow
-# enough to blow past Render's port-scan timeout).
-RUN python -c "from langchain_huggingface import HuggingFaceEmbeddings; HuggingFaceEmbeddings(model_name='sentence-transformers/all-MiniLM-L6-v2')"
-
 COPY agent.py memory.py api.py ./
 
 EXPOSE 7860
 
+# MEMORY_ENABLED=false skips importing torch/chromadb (memory.py) at
+# runtime - they don't fit in Render's free 512MB instance. Set as a
+# Render env var, not here, so local Docker runs can still opt in.
 CMD ["sh", "-c", "uvicorn api:app --host 0.0.0.0 --port ${PORT:-7860}"]

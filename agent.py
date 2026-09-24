@@ -1,3 +1,4 @@
+import os
 from dotenv import load_dotenv
 from typing import TypedDict
 from pydantic import BaseModel
@@ -5,9 +6,15 @@ from langgraph.graph import StateGraph, START, END
 from langchain_anthropic import ChatAnthropic
 from langchain_tavily import TavilySearch
 
-import memory
-
 load_dotenv()
+
+# torch + chromadb (memory.py's deps) don't fit in Render free tier's 512MB
+# RAM, so hosted deploys set MEMORY_ENABLED=false to skip importing them
+# entirely. CLI/MCP usage keeps the caching feature by default.
+MEMORY_ENABLED = os.getenv("MEMORY_ENABLED", "true").lower() == "true"
+
+if MEMORY_ENABLED:
+    import memory
 
 llm = ChatAnthropic(model="claude-sonnet-5")
 search = TavilySearch(max_results=5)
@@ -114,24 +121,30 @@ def write_node(state: AgentState) -> dict:
 
 
 graph = StateGraph(AgentState)
-graph.add_node("check_memory", check_memory_node)
 graph.add_node("search", search_node)
 graph.add_node("verify", verify_node)
 graph.add_node("summarize", summarize_node)
 graph.add_node("write", write_node)
-graph.add_node("save_memory", save_memory_node)
 
-graph.add_edge(START, "check_memory")
-graph.add_conditional_edges(
-    "check_memory",
-    route_after_memory,
-    {"cache_hit": END, "cache_miss": "search"},
-)
+if MEMORY_ENABLED:
+    graph.add_node("check_memory", check_memory_node)
+    graph.add_node("save_memory", save_memory_node)
+
+    graph.add_edge(START, "check_memory")
+    graph.add_conditional_edges(
+        "check_memory",
+        route_after_memory,
+        {"cache_hit": END, "cache_miss": "search"},
+    )
+    graph.add_edge("write", "save_memory")
+    graph.add_edge("save_memory", END)
+else:
+    graph.add_edge(START, "search")
+    graph.add_edge("write", END)
+
 graph.add_edge("search", "verify")
 graph.add_edge("verify", "summarize")
 graph.add_edge("summarize", "write")
-graph.add_edge("write", "save_memory")
-graph.add_edge("save_memory", END)
 
 app = graph.compile()
 
