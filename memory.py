@@ -1,3 +1,5 @@
+import sys
+
 from langchain_chroma import Chroma
 from langchain_huggingface import HuggingFaceEmbeddings
 
@@ -19,7 +21,7 @@ def find_similar_report(question: str) -> str | None:
         return None
 
     doc, score = results[0]
-    print(f"[memory] 가장 비슷한 과거 질문과의 유사도: {score:.3f}")
+    print(f"[memory] 가장 비슷한 과거 질문과의 유사도: {score:.3f}", file=sys.stderr)
     if score < SIMILARITY_THRESHOLD:
         return None
     return doc.metadata["report"]
