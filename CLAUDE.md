@@ -41,7 +41,7 @@ There is no test suite or linter. `test_search.py`, `test_mcp_client.py` and `he
 The core is a single LangGraph `StateGraph` in `agent.py` (`AgentState`: `question`, `search_results`, `summary`, `sections`, `report`). Every entry point wraps this same compiled graph (`app = graph.compile()`), not a separate implementation:
 
 - `api.py` — FastAPI, for n8n / HTTP callers
-- `mcp_server.py` — MCP tool (`research`) over stdio, for MCP clients
+- `mcp_server.py` — MCP server over stdio: tools `research` (whole graph), `web_search` (Tavily only, no LLM), `save_report` / `list_reports` (`reports/`, gitignored), and resource `report://{filename}`. Registered for Claude Code in `.mcp.json` (runs the venv's python, so it works without activating the venv).
 - `agent.py __main__` — direct CLI
 
 Supporting modules, all imported only when `MEMORY_ENABLED` is truthy (they pull in torch/chromadb):
@@ -67,6 +67,7 @@ START -> search -> verify -> summarize -> write -> END
   - The threshold was measured on Korean question pairs: paraphrases score 0.75–0.99, different questions 0.37–0.90, and the ranges overlap. It sits above the highest different-question score on purpose: a false hit returns the wrong report, a false miss only costs an extra run.
   - Changing the embedding model invalidates stored vectors: use a new collection name and re-embed the old questions (stored as documents, reports in metadata).
 - `extract_text()` in `agent.py` unwraps `ChatAnthropic` responses: Claude Sonnet 5's adaptive thinking can return `response.content` as a list of `{type, text}` blocks instead of a plain string. Any new node that reads `response.content` directly must go through `extract_text()` or it will leak raw thinking-block dicts into output.
+- `mcp_server.py` resolves `reports/` relative to its own file, since MCP clients launch it from arbitrary cwds. `save_report` sanitizes filenames (`_safe_filename`) and `read_report` checks the resolved path stays inside `reports/` — keep both when touching them; they're what stops `../` path traversal from a client. Note this SDK version (`mcp` 2.x) exposes snake_case model attributes on the client side (`read_only_hint`, `structured_content`, `uri_template`).
 - **stdio MCP servers must never `print()` to stdout** — stdout *is* the JSON-RPC channel in `mcp_server.py`. `memory.py` / `rag.py` log to `sys.stderr` for this reason; keep any new logging there too.
 
 Model: `claude-sonnet-5` (chosen for cost; not the skill-default `claude-opus-5`, since this is a budget-conscious side project). `hello_agent.py` still pins an older model id; it's a standalone first-steps script, not used by the graph.

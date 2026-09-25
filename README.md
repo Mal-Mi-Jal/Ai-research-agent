@@ -27,7 +27,10 @@ cp .env.example .env  # 그리고 .env에 실제 API 키 입력
 
 ## 실행 방법
 - CLI로 직접: `python agent.py`
-- MCP 서버로: `python mcp_server.py` (표준입출력 기반, MCP 클라이언트에서 `research` 도구로 호출)
+- MCP 서버로: `python mcp_server.py` (표준입출력 기반). 이 폴더에서 Claude Code를 열면 `.mcp.json`으로 자동 연결됨
+  - 도구: `research`(전체 리포트), `web_search`(검색만, LLM 호출 없음), `save_report`(reports/에 .md 저장), `list_reports`
+  - 리소스: `report://{파일명}` (저장된 리포트 읽기)
+  - 저장 파일명은 경로 구분자·특수문자를 제거해서 reports/ 밖으로 쓰거나 읽을 수 없게 함
 - HTTP API로: `uvicorn api:app --port 8000` (`POST /research {"topic": "..."}`)
 - n8n 자동화: `npx n8n`으로 n8n 실행 → `npx n8n import:workflow --input=workflow.json`으로 워크플로우 가져오기 (API 서버가 먼저 떠 있어야 함)
   - 흐름: 매일 9시 트리거 → 리서치 에이전트 호출 → 마크다운 → HTML 변환 → 메일 발송 (Gmail SMTP)

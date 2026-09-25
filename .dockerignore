@@ -4,3 +4,4 @@ __pycache__/
 .env
 .git/
 chroma_db/
+reports/

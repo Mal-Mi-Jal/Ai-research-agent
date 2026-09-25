@@ -73,18 +73,22 @@ def save_memory_node(state: AgentState) -> dict:
     return {}
 
 
-def search_node(state: AgentState) -> dict:
-    result = search.invoke(state["question"])
-    # Tavily가 같은 글을 한글 그대로인 URL과 %인코딩된 URL로 두 번 돌려주는 경우가
-    # 있어서, 디코딩한 URL 기준으로 중복을 제거한다
+def dedupe_by_url(results: list[dict]) -> list[dict]:
+    """Tavily가 같은 글을 한글 그대로인 URL과 %인코딩된 URL로 두 번 돌려주는 경우가
+    있어서, 디코딩한 URL 기준으로 중복을 제거한다."""
     seen = set()
     unique = []
-    for r in result["results"]:
+    for r in results:
         key = unquote(r["url"]).rstrip("/")
         if key not in seen:
             seen.add(key)
             unique.append(r)
-    return {"search_results": unique}
+    return unique
+
+
+def search_node(state: AgentState) -> dict:
+    result = search.invoke(state["question"])
+    return {"search_results": dedupe_by_url(result["results"])}
 
 
 def verify_node(state: AgentState) -> dict:

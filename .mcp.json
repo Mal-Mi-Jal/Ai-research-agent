@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "research-agent": {
+      "command": "venv/Scripts/python.exe",
+      "args": ["mcp_server.py"],
+      "env": {
+        "PYTHONIOENCODING": "utf-8"
+      }
+    }
+  }
+}
