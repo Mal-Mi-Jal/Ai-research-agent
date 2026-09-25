@@ -8,27 +8,40 @@ from langchain_tavily import TavilySearch
 
 load_dotenv()
 
-# torch + chromadb (memory.py's deps) don't fit in Render free tier's 512MB
-# RAM, so hosted deploys set MEMORY_ENABLED=false to skip importing them
-# entirely. CLI/MCP usage keeps the caching feature by default.
+# torch + chromadb (memory.py / rag.py deps) don't fit in Render free tier's
+# 512MB RAM, so hosted deploys set MEMORY_ENABLED=false to skip importing them
+# entirely. That disables both the question cache and RAG; the graph then falls
+# back to summarizing Tavily's short snippets. CLI/MCP usage keeps both on by default.
 MEMORY_ENABLED = os.getenv("MEMORY_ENABLED", "true").lower() == "true"
 
 if MEMORY_ENABLED:
     import memory
+    import rag
 
 llm = ChatAnthropic(model="claude-sonnet-5")
-search = TavilySearch(max_results=5)
+# RAG는 웹페이지 원문 전체를 조각내서 쓰므로, 켜져 있을 때만 원문을 받아온다
+search = TavilySearch(max_results=5, include_raw_content=MEMORY_ENABLED)
 
 
 class AgentState(TypedDict):
     question: str
     search_results: list
     summary: str
+    sections: list
     report: str
 
 
 class RelevanceCheck(BaseModel):
     relevant_indices: list[int]
+
+
+class SectionPlan(BaseModel):
+    heading: str
+    query: str
+
+
+class Outline(BaseModel):
+    sections: list[SectionPlan]
 
 
 def extract_text(message) -> str:
@@ -100,8 +113,52 @@ def summarize_node(state: AgentState) -> dict:
     return {"summary": extract_text(response)}
 
 
-def write_node(state: AgentState) -> dict:
-    prompt = f"""다음 정리된 자료를 바탕으로 "{state['question']}"에 대한 리포트 본문을 작성해줘.
+def plan_node(state: AgentState) -> dict:
+    sources_text = "\n\n".join(
+        f"[{i + 1}] {r['title']}\n{r['content'][:200]}"
+        for i, r in enumerate(state["search_results"])
+    )
+    prompt = f"""다음 검색 결과를 바탕으로 "{state['question']}"에 대한 리포트의 목차를 짜줘.
+
+{sources_text}
+
+- 소제목 3~5개
+- 각 소제목마다, 원문에서 그 섹션의 근거 문장을 찾을 검색 질의(query)를 한 문장으로 적어줘"""
+    outline = llm.with_structured_output(Outline).invoke(prompt)
+    return {"sections": [s.model_dump() for s in outline.sections]}
+
+
+def retrieve_node(state: AgentState) -> dict:
+    evidence = rag.retrieve_evidence(
+        state["search_results"], [s["query"] for s in state["sections"]]
+    )
+    return {
+        "sections": [
+            {**section, "evidence": chunks}
+            for section, chunks in zip(state["sections"], evidence)
+        ]
+    }
+
+
+def rag_write_prompt(state: AgentState) -> str:
+    material = "\n\n".join(
+        f"## {s['heading']}\n"
+        + "\n".join(f"[{c['source']}] {c['text']}" for c in s["evidence"])
+        for s in state["sections"]
+    )
+    return f"""다음은 "{state['question']}" 리포트의 목차와, 소제목마다 웹페이지 원문에서 찾아온 근거 조각이야. 조각 앞의 [n]은 출처 번호야.
+
+{material}
+
+- 맨 위에 "# 제목" 한 줄을 쓰고, 위 소제목을 순서대로 "## 소제목"으로 써줘
+- 각 섹션은 2~3문장으로 간결하게, 그 섹션의 근거 조각에 있는 내용만 사용해줘
+- 문장마다 근거가 된 조각의 출처 번호를 [1], [2] 형식으로 인용해줘
+- 근거 조각에 없는 수치나 사실은 지어내지 마
+- 출처 URL 목록은 작성하지 마 (별도로 붙일 거야)"""
+
+
+def summary_write_prompt(state: AgentState) -> str:
+    return f"""다음 정리된 자료를 바탕으로 "{state['question']}"에 대한 리포트 본문을 작성해줘.
 
 정리된 자료:
 {state['summary']}
@@ -110,6 +167,14 @@ def write_node(state: AgentState) -> dict:
 - 각 섹션은 2~3문장으로 간결하게
 - 본문 내용에 참고한 출처 번호를 [1], [2] 형식으로 인용해줘
 - 출처 URL 목록은 작성하지 마 (별도로 붙일 거야)"""
+
+
+def write_node(state: AgentState) -> dict:
+    # RAG 경로(plan → retrieve)를 거쳤으면 sections가, 아니면 summary가 채워져 있다
+    if state.get("sections"):
+        prompt = rag_write_prompt(state)
+    else:
+        prompt = summary_write_prompt(state)
     response = llm.invoke(prompt)
 
     sources = "\n".join(
@@ -124,13 +189,19 @@ def write_node(state: AgentState) -> dict:
 graph = StateGraph(AgentState)
 graph.add_node("search", search_node)
 graph.add_node("verify", verify_node)
-graph.add_node("summarize", summarize_node)
 graph.add_node("write", write_node)
+graph.add_edge("search", "verify")
 
 if MEMORY_ENABLED:
+    # RAG: 목차를 먼저 짜고, 소제목마다 원문 조각을 벡터 검색해서 근거로 쓴다
+    graph.add_node("plan", plan_node)
+    graph.add_node("retrieve", retrieve_node)
+    graph.add_edge("verify", "plan")
+    graph.add_edge("plan", "retrieve")
+    graph.add_edge("retrieve", "write")
+
     graph.add_node("check_memory", check_memory_node)
     graph.add_node("save_memory", save_memory_node)
-
     graph.add_edge(START, "check_memory")
     graph.add_conditional_edges(
         "check_memory",
@@ -140,12 +211,13 @@ if MEMORY_ENABLED:
     graph.add_edge("write", "save_memory")
     graph.add_edge("save_memory", END)
 else:
+    # Render 무료 티어: 임베딩 없이 Tavily 요약문을 LLM이 정리해서 쓴다
+    graph.add_node("summarize", summarize_node)
+    graph.add_edge("verify", "summarize")
+    graph.add_edge("summarize", "write")
+
     graph.add_edge(START, "search")
     graph.add_edge("write", END)
-
-graph.add_edge("search", "verify")
-graph.add_edge("verify", "summarize")
-graph.add_edge("summarize", "write")
 
 app = graph.compile()
 

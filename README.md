@@ -5,11 +5,14 @@
 **Live demo**: https://ai-research-agent-ctjj.onrender.com/docs (`POST /research {"topic": "..."}`, 무료 티어라 비활성 시 슬립 → 첫 요청은 콜드스타트로 느릴 수 있음)
 
 ## Stack
-- LangGraph — 에이전트 워크플로우 (검색 → 캐시 확인 → 검증 → 요약 → 작성)
+- LangGraph — 에이전트 워크플로우 (캐시 확인 → 검색 → 검증 → 목차 → 근거 검색(RAG) → 작성)
 - LangChain — LLM 연동 레이어
 - Anthropic Claude API — 추론 엔진
 - Tavily — 웹 검색
-- Chroma + sentence-transformers — 로컬 벡터DB, 과거 질문 캐싱 (`MEMORY_ENABLED=false`로 끌 수 있음)
+- Chroma + sentence-transformers — 로컬 벡터DB
+  - RAG: 검색된 웹페이지 원문을 300자 조각으로 임베딩 → 소제목별로 MMR 검색 → 찾아온 조각만 근거로 인용하며 작성 (다국어 임베딩 모델)
+  - 캐시: 비슷한 질문이 다시 오면 과거 리포트 재사용
+  - `MEMORY_ENABLED=false`면 둘 다 꺼지고 Tavily 요약문 기반으로 작성 (Render 무료 티어용)
 - MCP — `mcp_server.py`로 에이전트를 표준 도구화
 - n8n — `workflow.json`으로 스케줄 자동 실행
 - Docker + Render — 배포

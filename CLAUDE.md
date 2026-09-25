@@ -49,12 +49,19 @@ The core is a single LangGraph `StateGraph` in `agent.py` (`AgentState`: `questi
 - `api.py` — FastAPI, for n8n / HTTP callers
 - `mcp_server.py` — MCP tool (`research`) over stdio, for MCP clients
 - `agent.py __main__` — direct CLI
+- `rag.py` — chunking + per-run vector retrieval used by the `plan`/`retrieve` nodes
 
 Graph flow:
 ```
+MEMORY_ENABLED=true (local default):
 START -> check_memory --(cache_hit)--> END
-                        --(cache_miss)--> search -> verify -> summarize -> write -> save_memory -> END
+                        --(cache_miss)--> search -> verify -> plan -> retrieve -> write -> save_memory -> END
+MEMORY_ENABLED=false (Render):
+START -> search -> verify -> summarize -> write -> END
 ```
+
+- RAG path: `search` requests Tavily `raw_content` (full page text). `plan` has the LLM produce 3–5 section headings, each with a retrieval query. `retrieve` (`rag.retrieve_evidence`) chunks each source's raw text (300 chars, 50 overlap, first 10k chars per source), embeds them into a throwaway in-memory Chroma collection, and runs MMR search per section query; each chunk carries its source number so `write` cites `[n]` against actual page text. `write_node` picks the RAG prompt when `state["sections"]` is set, else the summary prompt.
+- `rag.py` uses `paraphrase-multilingual-MiniLM-L12-v2`, not memory.py's `all-MiniLM-L6-v2`: the English-only model can't separate Korean sentences (an unrelated weather sentence scored 0.6 against a salary query). The multilingual model truncates at 128 tokens (~300 Korean chars), which is what `CHUNK_SIZE` is sized to.
 
 - `check_memory` / `save_memory` (in `memory.py`) embed the **question** (not the report) with a local sentence-transformer and compare against past questions in a Chroma store (`./chroma_db`, gitignored) using cosine similarity, threshold `SIMILARITY_THRESHOLD = 0.85` in `memory.py`. A hit skips the entire search/verify/summarize/write chain — this is the main lever for avoiding redundant Claude/Tavily API calls, so keep embedding the question side when touching this file, not the report side.
 - `verify` uses `llm.with_structured_output(RelevanceCheck)` to drop irrelevant Tavily results before they reach the summarizer.
