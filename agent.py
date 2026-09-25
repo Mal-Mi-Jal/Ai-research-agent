@@ -113,10 +113,11 @@ def write_node(state: AgentState) -> dict:
     response = llm.invoke(prompt)
 
     sources = "\n".join(
-        f"[{i + 1}] {r['title']} - {r['url']}"
+        f"- [{i + 1}] {r['title']} - {r['url']}"
         for i, r in enumerate(state["search_results"])
     )
-    report = f"{extract_text(response)}\n\n---\n출처:\n{sources}"
+    # 마크다운 목록(- )이어야 HTML 변환 시 출처가 한 줄씩 나뉜다 (n8n 메일 발송)
+    report = f"{extract_text(response)}\n\n---\n출처:\n\n{sources}"
     return {"report": report}
 
 
