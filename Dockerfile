@@ -5,7 +5,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY agent.py memory.py rag.py api.py ./
+COPY agent.py embedding.py memory.py rag.py api.py ./
 
 EXPOSE 7860
 

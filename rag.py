@@ -6,16 +6,10 @@ import sys
 import uuid
 
 from langchain_chroma import Chroma
-from langchain_huggingface import HuggingFaceEmbeddings
 
-# memory.py의 all-MiniLM-L6-v2는 영어 전용이라 한국어 문장 의미를 거의 구분하지 못한다
-# ("AI 엔지니어 연봉" 질의에 날씨 문장이 0.6 유사도). 원문 조각 검색은 한국어 품질이
-# 핵심이라 다국어 모델을 쓴다.
-embeddings = HuggingFaceEmbeddings(
-    model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
-)
+from embedding import embeddings
 
-# 이 모델은 최대 128토큰까지만 임베딩하고 나머지는 잘라버린다. 한국어 300자 ≈ 128토큰.
+# 임베딩 모델은 최대 128토큰까지만 임베딩하고 나머지는 잘라버린다. 한국어 300자 ≈ 128토큰.
 CHUNK_SIZE = 300
 CHUNK_OVERLAP = 50
 # 원문이 수만 자인 페이지도 있어서, 임베딩 시간을 제한하려고 출처당 앞부분만 쓴다
