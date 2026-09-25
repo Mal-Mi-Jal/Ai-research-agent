@@ -23,7 +23,11 @@ uvicorn api:app --port 8000       # POST /research {"topic": "..."}
 
 # n8n automation
 npx n8n                                          # start n8n (first run installs it)
-npx n8n import:workflow --input=workflow.json    # import the schedule -> HTTP Request workflow
+npx n8n import:workflow --input=workflow.json    # import the schedule -> HTTP Request -> Markdown -> Send Email (SMTP) workflow
+# The Send Email node uses Gmail SMTP + an app password, not the Gmail API node:
+# Gmail OAuth needs a Google Cloud project, which pushed the user into a paid billing
+# signup. The node ships without credentials and with a YOUR_EMAIL@gmail.com placeholder
+# recipient (so no personal address gets committed) — both are set in the n8n UI after import.
 # api.py must already be running on port 8000. On Windows, n8n (Node) resolves
 # "localhost" to the IPv6 loopback first; uvicorn only listens on IPv4, so the
 # HTTP Request node must target 127.0.0.1, not localhost.

@@ -34,6 +34,36 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "mode": "markdownToHtml",
+        "markdown": "={{ $json.report }}",
+        "destinationKey": "html",
+        "options": {}
+      },
+      "id": "markdown-1",
+      "name": "마크다운 → HTML",
+      "type": "n8n-nodes-base.markdown",
+      "typeVersion": 1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "fromEmail": "YOUR_EMAIL@gmail.com",
+        "toEmail": "YOUR_EMAIL@gmail.com",
+        "subject": "=[리서치 리포트] {{ $now.toFormat('yyyy-MM-dd') }}",
+        "emailFormat": "html",
+        "html": "={{ $json.html }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "email-send-1",
+      "name": "메일 발송",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [900, 300]
     }
   ],
   "connections": {
@@ -42,6 +72,28 @@
         [
           {
             "node": "리서치 에이전트 호출",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "리서치 에이전트 호출": {
+      "main": [
+        [
+          {
+            "node": "마크다운 → HTML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "마크다운 → HTML": {
+      "main": [
+        [
+          {
+            "node": "메일 발송",
             "type": "main",
             "index": 0
           }

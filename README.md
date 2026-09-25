@@ -27,6 +27,9 @@ cp .env.example .env  # 그리고 .env에 실제 API 키 입력
 - MCP 서버로: `python mcp_server.py` (표준입출력 기반, MCP 클라이언트에서 `research` 도구로 호출)
 - HTTP API로: `uvicorn api:app --port 8000` (`POST /research {"topic": "..."}`)
 - n8n 자동화: `npx n8n`으로 n8n 실행 → `npx n8n import:workflow --input=workflow.json`으로 워크플로우 가져오기 (API 서버가 먼저 떠 있어야 함)
+  - 흐름: 매일 9시 트리거 → 리서치 에이전트 호출 → 마크다운 → HTML 변환 → 메일 발송 (Gmail SMTP)
+  - 가져온 뒤 n8n UI의 `메일 발송` 노드에서 SMTP 크리덴셜(host `smtp.gmail.com`, port `465`, SSL/TLS on, user = Gmail 주소, password = Gmail 앱 비밀번호)을 연결하고, 보내는/받는 주소(`YOUR_EMAIL@gmail.com`)를 본인 주소로 바꿔야 함
+  - Gmail API(OAuth) 대신 SMTP를 쓰는 이유: Google Cloud 결제 계정 없이 무료로 동작
 
 ## 배포 (Render)
 1. `Dockerfile` 기준으로 Render Web Service 생성 (Language: Docker)
