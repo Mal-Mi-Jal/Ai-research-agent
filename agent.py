@@ -1,4 +1,5 @@
 import os
+from urllib.parse import unquote
 from dotenv import load_dotenv
 from typing import TypedDict
 from pydantic import BaseModel
@@ -74,7 +75,16 @@ def save_memory_node(state: AgentState) -> dict:
 
 def search_node(state: AgentState) -> dict:
     result = search.invoke(state["question"])
-    return {"search_results": result["results"]}
+    # Tavily가 같은 글을 한글 그대로인 URL과 %인코딩된 URL로 두 번 돌려주는 경우가
+    # 있어서, 디코딩한 URL 기준으로 중복을 제거한다
+    seen = set()
+    unique = []
+    for r in result["results"]:
+        key = unquote(r["url"]).rstrip("/")
+        if key not in seen:
+            seen.add(key)
+            unique.append(r)
+    return {"search_results": unique}
 
 
 def verify_node(state: AgentState) -> dict:
