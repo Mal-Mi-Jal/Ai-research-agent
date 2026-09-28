@@ -143,3 +143,14 @@ n8n 워크플로우 흐름은 `매일 9시 트리거 → 리서치 에이전트 
 - **캐시 기준값은 경계가 겹칩니다.** 뜻이 같은 질문 일부는 캐시를 쓰지 못합니다(설계 판단 3번 참고).
 - **자동화된 테스트가 없습니다.** 지금은 수동 스크립트와 실제 실행으로 검증합니다.
 - **AWS 배포(Lambda + S3)는 비용 문제로 보류 중입니다.**
+
+## 관련 프로젝트
+
+```
+RamenLog (라멘 방문 인증 서비스) ──▶ AI Research Agent (이 저장소) ──▶ Ramen Vision Bot (로컬 Vision + RAG)
+```
+
+| 프로젝트 | 한 줄 소개 | 이 프로젝트와의 연결 |
+|---|---|---|
+| [Ramen Vision Bot](https://github.com/Mal-Mi-Jal/ramen-vision-bot) | 라멘 사진을 보고 종류를 판별하는 **로컬 Vision + RAG 봇**. 유료 API 없이 8GB GPU에서 동작, 튜닝에 안 쓴 사진 기준 VLM 단독 28% → 60% | 이 프로젝트의 RAG·인용 설계를 **이미지 입력과 로컬 모델**로 확장. 하이브리드 검색, held-out 평가 추가 |
+| [RamenLog](https://github.com/Mal-Mi-Jal/Ramen-frontend) | **GPS + 체류 시간으로 방문을 인증**해야 리뷰를 쓸 수 있는 라멘 리뷰 서비스 (Kotlin · Spring Boot, 백엔드 저장소는 비공개) | 서비스를 직접 만들어 본 경험이 AI 기능을 API로 제공하는 설계의 바탕이 됨 |
