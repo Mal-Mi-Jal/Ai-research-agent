@@ -83,6 +83,8 @@ Model: `claude-sonnet-5` (chosen for cost; not the skill-default `claude-opus-5`
 
 Live at https://ai-research-agent-ctjj.onrender.com. Required env vars: `ANTHROPIC_API_KEY`, `TAVILY_API_KEY`, `MEMORY_ENABLED=false`. Source repo: GitHub `Mal-Mi-Jal/Ai-research-agent`, branch `main`.
 
+The public `/research` endpoint is rate-limited in `api.py` because every run spends Claude/Tavily credits and the cache is off on Render: `DEMO_DAILY_LIMIT` (default 10 runs/day, UTC), `DEMO_IP_LIMIT` per `DEMO_IP_WINDOW_SECONDS` (default 2 per hour, client IP from the first `X-Forwarded-For` entry), topic 2–200 chars (422 otherwise). Over the limit → 429. Counts are in memory and reset when the instance restarts or sleeps. A run is counted before it starts, so failed runs count too. To test without paid calls, patch `api.agent_app.invoke` and use FastAPI's `TestClient`.
+
 `MEMORY_ENABLED=false` is not optional on the free instance — it's a hard requirement, not a tuning knob:
 - Render free web services have 512MB RAM. The imports behind `embedding.py` / `memory.py` / `rag.py` (`torch` via `sentence-transformers`, `chromadb`) don't fit alongside the rest of the process; the container gets OOM-killed before `uvicorn` can bind a port.
 - `agent.py` only imports `memory` / `rag` when `MEMORY_ENABLED` is truthy, so setting it to `false` keeps torch out of the import graph entirely rather than just skipping nodes at runtime. That also means Render serves the snippet-summary path, not RAG.
